@@ -1,0 +1,17 @@
+[package]
+name = "hello-wgpu"
+version = "0.1.0"
+authors = ["Ville Touronen <touronen@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+winit = "0.23"
+wgpu = "0.6.2"
+shaderc = "0.6"
+image = "0.23"
+cgmath = "0.17"
+env_logger = "0.7"
+log = "0.4"
+futures = "0.3"
