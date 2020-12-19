@@ -11,11 +11,13 @@ pub struct State {
     pub sc_desc: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub size: winit::dpi::PhysicalSize<u32>,
+    pub pointer: (f64, f64)
 }
 
 impl State {
     // Creating some of the wgpu types requires async code
     pub async fn new(window: &Window) -> Self {
+        let pointer = (0.0, 0.0);
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -73,6 +75,7 @@ impl State {
             sc_desc,
             swap_chain,
             size,
+            pointer,
         }
     }
 
@@ -85,8 +88,17 @@ impl State {
         self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc)
     }
 
-    pub fn input(&mut self, _event: &WindowEvent) -> bool {
-        false
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::CursorMoved {
+                position,
+                ..
+            } => {
+                self.pointer = (position.x, position.y);
+                true
+            },
+            _ => false
+        }
     }
 
     pub fn update(&mut self) {
@@ -118,9 +130,9 @@ impl State {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.9,
-                                g: 0.1,
-                                b: 0.1,
+                                r: &self.pointer.1 / f64::from(self.size.height),
+                                g: 0.0,
+                                b: &self.pointer.0 / f64::from(self.size.width),
                                 a: 1.0,
                             }),
                             store: true,
