@@ -11,7 +11,8 @@ pub struct State {
     pub sc_desc: wgpu::SwapChainDescriptor,
     pub swap_chain: wgpu::SwapChain,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub pointer: (f64, f64)
+    pub pointer: (f64, f64),
+    pub render_pipeline: wgpu::RenderPipeline,
 }
 
 impl State {
@@ -68,6 +69,61 @@ impl State {
         // the current image. The framerate will be capped at the display refresh rate,
         // corresponding to the `VSync`. Tearing cannot be observed. Optimal for mobile.
 
+        let vs_src = include_str!("../shader.vert");
+        let fs_src = include_str!("../shader.frag");
+        let mut compiler = shaderc::Compiler::new().unwrap();
+        let vs_spirv = compiler.compile_into_spirv(vs_src, shaderc::ShaderKind::Vertex, "shader.vert", "main", None).unwrap();
+        let fs_spirv = compiler.compile_into_spirv(fs_src, shaderc::ShaderKind::Fragment, "shader.frag", "main", None).unwrap();
+        let vs_module = device.create_shader_module(wgpu::util::make_spirv(&vs_spirv.as_binary_u8()));
+        let fs_module = device.create_shader_module(wgpu::util::make_spirv(&fs_spirv.as_binary_u8()));        
+        
+        let render_pipeline_layout =
+        device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Render Pipeline Layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &vs_module,
+                entry_point: "main", // 1.
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor { // 2.
+                module: &fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: Some(
+                wgpu::RasterizationStateDescriptor {
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: wgpu::CullMode::Back,
+                    depth_bias: 0,
+                    depth_bias_slope_scale: 0.0,
+                    depth_bias_clamp: 0.0,
+                    clamp_depth: false,
+                }
+            ),
+            color_states: &[
+                wgpu::ColorStateDescriptor {
+                    format: sc_desc.format,
+                    color_blend: wgpu::BlendDescriptor::REPLACE,
+                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    write_mask: wgpu::ColorWrite::ALL,
+                },
+            ],
+            primitive_topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+            depth_stencil_state: None, // 2.
+            vertex_state: wgpu::VertexStateDescriptor {
+                index_format: wgpu::IndexFormat::Uint16, // 3.
+                vertex_buffers: &[], // 4.
+            },
+            sample_count: 1, // 5.
+            sample_mask: !0, // 6.
+            alpha_to_coverage_enabled: false, // 7.
+        });
+
         Self {
             surface,
             device,
@@ -76,6 +132,7 @@ impl State {
             swap_chain,
             size,
             pointer,
+            render_pipeline,
         }
     }
 
@@ -123,7 +180,7 @@ impl State {
         // thus releasing the mutable borrow on encoder and allowing us to finish() it.
         // You can also use drop(render_pass) to achieve the same effect.
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[
                     wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: &frame.view,
@@ -141,6 +198,10 @@ impl State {
                 ],
                 depth_stencil_attachment: None,
             });
+
+            // NEW!
+            render_pass.set_pipeline(&self.render_pipeline); // 2.
+            render_pass.draw(0..3, 0..1); // 3.
         }
     
         // submit will accept anything that implements IntoIter
