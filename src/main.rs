@@ -1,11 +1,11 @@
-use crate::hello::state::State;
+mod rendering;
+
+use crate::rendering::State;
 use winit::{
     event::*,
     event_loop::{EventLoop, ControlFlow},
     window::{WindowBuilder},
 };
-
-mod hello;
 
 fn main() {
     env_logger::init();
