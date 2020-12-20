@@ -55,6 +55,36 @@ const INDICES: &[u16] = &[
     2, 3, 4,
 ];
 
+const FISH_VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.2, 0.3, 0.0], color: [0.5, 0.0, 0.5] }, 
+    Vertex { position: [-0.2, -0.3, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [-0.1, 0.1, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [-0.1, -0.1, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.0, 0.2, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.0, -0.2, 0.0], color: [0.5, 0.0, 0.5] }, 
+    Vertex { position: [0.1, 0.25, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.1, -0.25, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.2, 0.3, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.2, -0.3, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.3, 0.2, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.3, -0.2, 0.0], color: [0.5, 0.0, 0.5] },
+    Vertex { position: [0.35, 0.0, 0.0], color: [0.5, 0.0, 0.5] }
+];
+
+const FISH_INDICES: &[u16] = &[
+    0, 1, 2,
+    1, 3, 2,
+    2, 3, 4,
+    3, 5, 4,
+    4, 5, 6,
+    5, 7, 6,
+    6, 7, 8,
+    7, 9, 8,
+    8, 9, 10,
+    9, 11, 10,
+    10, 11, 12,
+];
+
 pub struct State {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -69,6 +99,9 @@ pub struct State {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer, 
     pub num_indices: u32,
+    pub fish_vertex_buffer: wgpu::Buffer,
+    pub fish_index_buffer: wgpu::Buffer, 
+    pub fish_num_indices: u32,
 }
 
 impl State {
@@ -110,13 +143,31 @@ impl State {
 
         let index_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
+                label: Some("Index Buffer"),
                 contents: bytemuck::cast_slice(INDICES),
                 usage: wgpu::BufferUsage::INDEX,
             }
         );
 
         let num_indices = INDICES.len() as u32;
+
+        let fish_vertex_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Fish Vertex Buffer"),
+                contents: bytemuck::cast_slice(FISH_VERTICES),
+                usage: wgpu::BufferUsage::VERTEX,
+            }
+        );
+
+        let fish_index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Fish Index Buffer"),
+                contents: bytemuck::cast_slice(FISH_INDICES),
+                usage: wgpu::BufferUsage::INDEX,
+            }
+        );
+
+        let fish_num_indices = FISH_INDICES.len() as u32;
 
         // Describes how images are displayed to Surface
         let sc_desc = wgpu::SwapChainDescriptor {
@@ -162,10 +213,9 @@ impl State {
             layout: Some(&render_pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
-                entry_point: "main", // 1.
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                // 2.
                 module: &fs_module,
                 entry_point: "main",
             }),
@@ -246,6 +296,9 @@ impl State {
             vertex_buffer,
             index_buffer,
             num_indices,
+            fish_vertex_buffer,
+            fish_index_buffer,
+            fish_num_indices
         }
     }
 
@@ -317,16 +370,20 @@ impl State {
                 depth_stencil_attachment: None,
             });
 
-            render_pass.set_pipeline(
-                match self.alternative_pipeline {
-                    true => &self.render_pipeline,
-                    false => &self.render_pipeline2
-                }
-            );
+            render_pass.set_pipeline(&self.render_pipeline);
 
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..));
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            match self.alternative_pipeline {
+                true => {
+                    render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(self.index_buffer.slice(..));
+                    render_pass.draw_indexed(0..self.num_indices, 0, 0..1);        
+                },
+                false => {
+                    render_pass.set_vertex_buffer(0, self.fish_vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(self.fish_index_buffer.slice(..));
+                    render_pass.draw_indexed(0..self.fish_num_indices, 0, 0..1);
+                }
+            }
         }
         // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));
