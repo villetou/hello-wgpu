@@ -94,8 +94,7 @@ pub struct State {
     pub size: winit::dpi::PhysicalSize<u32>,
     pub pointer: (f64, f64),
     pub render_pipeline: wgpu::RenderPipeline,
-    pub render_pipeline2: wgpu::RenderPipeline,
-    pub alternative_pipeline: bool,
+    pub draw_challenge: bool,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer, 
     pub num_indices: u32,
@@ -198,9 +197,6 @@ impl State {
         let vs_module = device.create_shader_module(wgpu::include_spirv!("../shader.vert.spv"));
         let fs_module = device.create_shader_module(wgpu::include_spirv!("../shader.frag.spv"));
 
-        let vs_module2 = device.create_shader_module(wgpu::include_spirv!("../shader2.vert.spv"));
-        let fs_module2 = device.create_shader_module(wgpu::include_spirv!("../shader2.frag.spv"));
-
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
@@ -246,42 +242,6 @@ impl State {
             alpha_to_coverage_enabled: false,
         });
 
-        let render_pipeline2 = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline 2"),
-            layout: Some(&render_pipeline_layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &vs_module2,
-                entry_point: "main",
-            },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &fs_module2,
-                entry_point: "main",
-            }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: wgpu::CullMode::Back,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
-                clamp_depth: false,
-            }),
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: sc_desc.format,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            depth_stencil_state: None,
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[],
-            },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
-        });
-
         Self {
             surface,
             device,
@@ -291,8 +251,7 @@ impl State {
             size,
             pointer: (0.0, 0.0),
             render_pipeline,
-            render_pipeline2,
-            alternative_pipeline: false,
+            draw_challenge: false,
             vertex_buffer,
             index_buffer,
             num_indices,
@@ -323,7 +282,7 @@ impl State {
                     virtual_keycode: Some(VirtualKeyCode::Space),
                     ..
                 } => {
-                    self.alternative_pipeline = !self.alternative_pipeline;
+                    self.draw_challenge = !self.draw_challenge;
                     true
                 }
                 _ => false,
@@ -372,13 +331,13 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
 
-            match self.alternative_pipeline {
-                true => {
+            match self.draw_challenge {
+                false => {
                     render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
                     render_pass.set_index_buffer(self.index_buffer.slice(..));
                     render_pass.draw_indexed(0..self.num_indices, 0, 0..1);        
                 },
-                false => {
+                true => {
                     render_pass.set_vertex_buffer(0, self.fish_vertex_buffer.slice(..));
                     render_pass.set_index_buffer(self.fish_index_buffer.slice(..));
                     render_pass.draw_indexed(0..self.fish_num_indices, 0, 0..1);

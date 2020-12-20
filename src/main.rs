@@ -2,7 +2,7 @@ use crate::hello::state::State;
 use winit::{
     event::*,
     event_loop::{EventLoop, ControlFlow},
-    window::{Window, WindowBuilder},
+    window::{WindowBuilder},
 };
 
 mod hello;
