@@ -42,11 +42,19 @@ impl Vertex {
 }
 
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
+    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, // A
+    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, // B
+    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.5, 0.0, 0.5] }, // C
+    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, // D
+    Vertex { position: [0.44147372, 0.2347359, 0.0],color: [0.5, 0.0, 0.5] }, // E
 ];
- 
+
+const INDICES: &[u16] = &[
+    0, 1, 4,
+    1, 2, 4,
+    2, 3, 4,
+];
+
 pub struct State {
     pub surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -59,7 +67,8 @@ pub struct State {
     pub render_pipeline2: wgpu::RenderPipeline,
     pub alternative_pipeline: bool,
     pub vertex_buffer: wgpu::Buffer,
-    pub num_vertices: u32,
+    pub index_buffer: wgpu::Buffer, 
+    pub num_indices: u32,
 }
 
 impl State {
@@ -98,6 +107,16 @@ impl State {
                 usage: wgpu::BufferUsage::VERTEX,
             }
         );
+
+        let index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsage::INDEX,
+            }
+        );
+
+        let num_indices = INDICES.len() as u32;
 
         // Describes how images are displayed to Surface
         let sc_desc = wgpu::SwapChainDescriptor {
@@ -225,7 +244,8 @@ impl State {
             render_pipeline2,
             alternative_pipeline: false,
             vertex_buffer,
-            num_vertices: VERTICES.len() as u32
+            index_buffer,
+            num_indices,
         }
     }
 
@@ -305,7 +325,8 @@ impl State {
             );
 
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..self.num_vertices, 0..1);
+            render_pass.set_index_buffer(self.index_buffer.slice(..));
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
         // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));
