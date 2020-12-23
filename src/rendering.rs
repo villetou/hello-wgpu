@@ -172,7 +172,7 @@ impl State {
             format: wgpu::TextureFormat::Bgra8UnormSrgb, // The screen format that is most widely available, should use the screens native format but there's no way to query it yet
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Mailbox, // Immediate, Mailbox, Fifo (listen to VBlank or not?)
+            present_mode: wgpu::PresentMode::Immediate, // Immediate, Mailbox, Fifo (listen to VBlank or not?)
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         // PresentModes
@@ -249,6 +249,11 @@ impl State {
                 imgui_winit_support::HiDpiMode::Default,
             );
             imgui.set_ini_filename(None);
+
+            imgui.io_mut().mouse_pos = [0.0, 0.0];
+
+            imgui.style_mut().window_border_size = 0.0;
+            imgui.style_mut().window_padding = [10.0, 10.0];
 
             let hidpi_factor = window.scale_factor();
 
@@ -449,6 +454,7 @@ impl State {
         // Imgui stuff
         self.imgui.platform.prepare_frame(self.imgui.ctx.io_mut(), &window)
                     .expect("Failed to prepare frame");
+
         let ui = self.imgui.ctx.frame();
 
         {
@@ -463,7 +469,7 @@ impl State {
                     ui.text(im_str!("Frametime: {:?}", 0.1337)); // delta_s
                     let mouse_pos = ui.io().mouse_pos;
                     ui.text(im_str!(
-                        "Mouse Position: ({:.1},{:.1})",
+                        "Mouse Position: ({:.0},{:.0})",
                         mouse_pos[0],
                         mouse_pos[1]
                     ));
