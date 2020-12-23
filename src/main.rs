@@ -1,3 +1,5 @@
+extern crate imgui_winit_support;
+
 mod rendering;
 
 use crate::rendering::State;
@@ -47,9 +49,12 @@ fn main() {
                     _ => {}
                 }
             },
+            Event::RedrawEventsCleared => {
+                // noop
+            }
             Event::RedrawRequested(_) => {
                 state.update();
-                match state.render() {
+                match state.render(&window) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
                     Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
@@ -66,5 +71,7 @@ fn main() {
             },
             _ => {}
         }
+
+        state.imgui.platform.handle_event(state.imgui.ctx.io_mut(), &window, &event);
     });
 }

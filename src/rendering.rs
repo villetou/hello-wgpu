@@ -1,3 +1,9 @@
+extern crate imgui_winit_support;
+use imgui::*;
+use imgui_wgpu::{Renderer, RendererConfig};
+
+use std::time::Instant;
+
 mod texture;
 mod camera;
 
@@ -80,35 +86,14 @@ const INDICES: &[u16] = &[
     2, 3, 4,
 ];
 
-const FISH_VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.2, 0.3, 0.0], tex_coords: [0.0, 0.0] }, 
-    Vertex { position: [-0.2, -0.3, 0.0], tex_coords: [1.0, 0.0] },
-    Vertex { position: [-0.1, 0.1, 0.0], tex_coords: [1.0, 1.0] },
-    Vertex { position: [-0.1, -0.1, 0.0], tex_coords: [0.0, 1.0] },
-    Vertex { position: [0.0, 0.2, 0.0], tex_coords: [0.0, 0.0] },
-    Vertex { position: [0.0, -0.2, 0.0], tex_coords: [1.0, 0.0] }, 
-    Vertex { position: [0.1, 0.25, 0.0], tex_coords: [1.0, 1.0] },
-    Vertex { position: [0.1, -0.25, 0.0], tex_coords: [0.0, 1.0] },
-    Vertex { position: [0.2, 0.3, 0.0], tex_coords: [0.0, 0.0] },
-    Vertex { position: [0.2, -0.3, 0.0], tex_coords: [1.0, 0.0] },
-    Vertex { position: [0.3, 0.2, 0.0], tex_coords: [1.0, 1.0] },
-    Vertex { position: [0.3, -0.2, 0.0], tex_coords: [0.0, 1.0] },
-    Vertex { position: [0.35, 0.0, 0.0], tex_coords: [0.0, 0.0] }
-];
-
-const FISH_INDICES: &[u16] = &[
-    0, 1, 2,
-    1, 3, 2,
-    2, 3, 4,
-    3, 5, 4,
-    4, 5, 6,
-    5, 7, 6,
-    6, 7, 8,
-    7, 9, 8,
-    8, 9, 10,
-    9, 11, 10,
-    10, 11, 12,
-];
+pub struct ImguiState {
+    pub ctx: imgui::Context,
+    pub renderer: Renderer,
+    pub platform: imgui_winit_support::WinitPlatform,
+    demo_open: bool,
+    last_frame: Instant,
+    last_cursor: Option<(u32, u32)>,
+}
 
 pub struct State {
     pub surface: wgpu::Surface,
@@ -123,9 +108,6 @@ pub struct State {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer, 
     pub num_indices: u32,
-    pub fish_vertex_buffer: wgpu::Buffer,
-    pub fish_index_buffer: wgpu::Buffer, 
-    pub fish_num_indices: u32,
     pub diffuse_texture: texture::Texture,
     pub diffuse_bind_group: wgpu::BindGroup,
     camera: camera::Camera,
@@ -133,6 +115,7 @@ pub struct State {
     uniforms: Uniforms,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+    pub imgui: ImguiState,
 }
 
 impl State {
@@ -182,31 +165,13 @@ impl State {
 
         let num_indices = INDICES.len() as u32;
 
-        let fish_vertex_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Fish Vertex Buffer"),
-                contents: bytemuck::cast_slice(FISH_VERTICES),
-                usage: wgpu::BufferUsage::VERTEX,
-            }
-        );
-
-        let fish_index_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Fish Index Buffer"),
-                contents: bytemuck::cast_slice(FISH_INDICES),
-                usage: wgpu::BufferUsage::INDEX,
-            }
-        );
-
-        let fish_num_indices = FISH_INDICES.len() as u32;
-
         // Describes how images are displayed to Surface
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8UnormSrgb, // The screen format that is most widely available, should use the screens native format but there's no way to query it yet
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo, // Immediate, Mailbox, Fifo (listen to VBlank or not?)
+            present_mode: wgpu::PresentMode::Mailbox, // Immediate, Mailbox, Fifo (listen to VBlank or not?)
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         // PresentModes
@@ -271,7 +236,56 @@ impl State {
                 label: Some("diffuse_bind_group"),
             }
         );
-        
+
+        // Set up dear imgui
+        let imgui = {
+            let mut imgui = imgui::Context::create();
+
+            let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
+            platform.attach_window(
+                imgui.io_mut(),
+                &window,
+                imgui_winit_support::HiDpiMode::Default,
+            );
+            imgui.set_ini_filename(None);
+
+            let hidpi_factor = window.scale_factor();
+
+            let font_size = (13.0 * hidpi_factor) as f32;
+            imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+
+            imgui.fonts().add_font(&[FontSource::DefaultFontData {
+                config: Some(imgui::FontConfig {
+                    oversample_h: 1,
+                    pixel_snap_h: true,
+                    size_pixels: font_size,
+                    ..Default::default()
+                }),
+            }]);
+
+            //
+            // Set up dear imgui wgpu renderer
+            //
+            let _clear_color = wgpu::Color {
+                r: 0.1,
+                g: 0.2,
+                b: 0.3,
+                a: 1.0,
+            };
+
+            let renderer_config = RendererConfig {
+                texture_format: sc_desc.format,
+                ..Default::default()
+            };
+
+            let mut imgui_renderer = Renderer::new(&mut imgui, &device, &queue, renderer_config);
+
+            let mut last_frame = Instant::now();
+            let mut last_cursor = None;
+
+            ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: true, last_frame, last_cursor}
+        };
+
         let camera = camera::Camera {
             eye: (0.0, 1.0, 2.0).into(), // +z is out of the screen
             target: (0.0, 0.0, 0.0).into(),
@@ -387,9 +401,6 @@ impl State {
             vertex_buffer,
             index_buffer,
             num_indices,
-            fish_vertex_buffer,
-            fish_index_buffer,
-            fish_num_indices,
             diffuse_bind_group,
             diffuse_texture,
             camera,
@@ -397,6 +408,7 @@ impl State {
             uniforms,
             uniform_buffer,
             uniform_bind_group,
+            imgui,
         }
     }
 
@@ -439,8 +451,45 @@ impl State {
     }
 
     // We need Texture and TextureView to render the image
-    pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SwapChainError> {
+
+
+        
+
         let frame = self.swap_chain.get_current_frame()?.output;
+
+        // Imgui stuff
+        self.imgui.platform.prepare_frame(self.imgui.ctx.io_mut(), &window)
+                    .expect("Failed to prepare frame");
+        let ui = self.imgui.ctx.frame();
+
+        {
+            let window = imgui::Window::new(im_str!("Hello world"));
+            window
+                .size([300.0, 100.0], Condition::FirstUseEver)
+                .build(&ui, || {
+                    ui.text(im_str!("Hello world!"));
+                    ui.text(im_str!("This...is...imgui-rs on WGPU!"));
+                    ui.separator();
+                    let mouse_pos = ui.io().mouse_pos;
+                    ui.text(im_str!(
+                        "Mouse Position: ({:.1},{:.1})",
+                        mouse_pos[0],
+                        mouse_pos[1]
+                    ));
+                });
+
+            let window = imgui::Window::new(im_str!("Hello too"));
+            window
+                .size([400.0, 200.0], Condition::FirstUseEver)
+                .position([400.0, 200.0], Condition::FirstUseEver)
+                .build(&ui, || {
+                    ui.text(im_str!("Frametime: {:?}", 0.1337)); // delta_s
+                });
+
+            ui.show_demo_window(&mut self.imgui.demo_open);
+        }
+
 
         // The command encoder will
         let mut encoder = self
@@ -449,11 +498,8 @@ impl State {
                 label: Some("Render Encoder"),
             });
 
-        // encoder.begin_render_pass(...) borrows encoder mutably (aka &mut self).
-        // We can't call encoder.finish() until we release that mutable borrow.
-        // The {} around encoder.begin_render_pass(...) tells rust to drop any variables within them
-        // thus releasing the mutable borrow on encoder and allowing us to finish() it.
-        // You can also use drop(render_pass) to achieve the same effect.
+        self.imgui.platform.prepare_render(&ui, &window);
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -474,25 +520,19 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
 
-            match self.draw_challenge {
-                false => {
-                    render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-                    render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(self.index_buffer.slice(..));
-                    render_pass.draw_indexed(0..self.num_indices, 0, 0..1);        
-                },
-                
-                true => {
-                    render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-                    render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, self.fish_vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(self.fish_index_buffer.slice(..));
-                    render_pass.draw_indexed(0..self.fish_num_indices, 0, 0..1);
-                }
-            }
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..));
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);        
+            
+            self.imgui.renderer
+                .render(ui.render(), &self.queue, &self.device, &mut render_pass)
+                .expect("Rendering failed");
+
         }
-        // submit will accept anything that implements IntoIter
+
+        // We can't call encoder.finish() until we release mutable borrow (drop)
         self.queue.submit(std::iter::once(encoder.finish()));
         Ok(())
     }
