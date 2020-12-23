@@ -116,6 +116,7 @@ pub struct State {
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     pub imgui: ImguiState,
+    pub bg_color: [f32; 3],
 }
 
 impl State {
@@ -251,7 +252,7 @@ impl State {
 
             let hidpi_factor = window.scale_factor();
 
-            let font_size = (13.0 * hidpi_factor) as f32;
+            let font_size = (16.0 * hidpi_factor) as f32;
             imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
 
             imgui.fonts().add_font(&[FontSource::DefaultFontData {
@@ -263,16 +264,6 @@ impl State {
                 }),
             }]);
 
-            //
-            // Set up dear imgui wgpu renderer
-            //
-            let _clear_color = wgpu::Color {
-                r: 0.1,
-                g: 0.2,
-                b: 0.3,
-                a: 1.0,
-            };
-
             let renderer_config = RendererConfig {
                 texture_format: sc_desc.format,
                 ..Default::default()
@@ -283,7 +274,7 @@ impl State {
             let mut last_frame = Instant::now();
             let mut last_cursor = None;
 
-            ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: true, last_frame, last_cursor}
+            ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: false, last_frame, last_cursor}
         };
 
         let camera = camera::Camera {
@@ -409,6 +400,7 @@ impl State {
             uniform_buffer,
             uniform_bind_group,
             imgui,
+            bg_color: [0.02, 0.02, 0.01],
         }
     }
 
@@ -452,10 +444,6 @@ impl State {
 
     // We need Texture and TextureView to render the image
     pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SwapChainError> {
-
-
-        
-
         let frame = self.swap_chain.get_current_frame()?.output;
 
         // Imgui stuff
@@ -464,32 +452,35 @@ impl State {
         let ui = self.imgui.ctx.frame();
 
         {
-            let window = imgui::Window::new(im_str!("Hello world"));
+            let window = imgui::Window::new(im_str!("Hello world!"));
+            let mut tmp_color = self.bg_color;
             window
-                .size([300.0, 100.0], Condition::FirstUseEver)
+                .always_auto_resize(true)
                 .build(&ui, || {
-                    ui.text(im_str!("Hello world!"));
-                    ui.text(im_str!("This...is...imgui-rs on WGPU!"));
-                    ui.separator();
+
+                    let style = ui.push_style_vars([StyleVar::ItemSpacing([4.0, 4.0])].iter());
+
+                    ui.text(im_str!("Frametime: {:?}", 0.1337)); // delta_s
                     let mouse_pos = ui.io().mouse_pos;
                     ui.text(im_str!(
                         "Mouse Position: ({:.1},{:.1})",
                         mouse_pos[0],
                         mouse_pos[1]
                     ));
+                    ui.separator();
+                    if ColorEdit::new(im_str!("color_edit"), &mut tmp_color).build(&ui) {
+                        // state.notify_text = "*** Red button was clicked";
+                    }
+
+                    style.pop(&ui);
                 });
 
-            let window = imgui::Window::new(im_str!("Hello too"));
-            window
-                .size([400.0, 200.0], Condition::FirstUseEver)
-                .position([400.0, 200.0], Condition::FirstUseEver)
-                .build(&ui, || {
-                    ui.text(im_str!("Frametime: {:?}", 0.1337)); // delta_s
-                });
+            self.bg_color = tmp_color;
 
-            ui.show_demo_window(&mut self.imgui.demo_open);
+            if self.imgui.demo_open == true {
+                ui.show_demo_window(&mut self.imgui.demo_open);
+            }
         }
-
 
         // The command encoder will
         let mut encoder = self
@@ -507,9 +498,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: &self.pointer.1 / f64::from(self.size.height),
-                            g: 0.0,
-                            b: &self.pointer.0 / f64::from(self.size.width),
+                            r: f64::from(self.bg_color[0]),
+                            g: f64::from(self.bg_color[1]),
+                            b: f64::from(self.bg_color[2]),
                             a: 1.0,
                         }),
                         store: true,
