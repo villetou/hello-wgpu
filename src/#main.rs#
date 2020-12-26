@@ -21,9 +21,6 @@ fn main() {
     let mut state = futures::executor::block_on(State::new(&window));
 
     event_loop.run(move |event, _, control_flow| {
-
-        //*control_flow = ControlFlow::WaitUntil(std::time::Instant::now() + std::time::Duration::from_millis(5));
-
         match event {
             Event::WindowEvent {
                 ref event,
@@ -56,6 +53,7 @@ fn main() {
                 
             }
             Event::RedrawRequested(_) => {
+                state.update();
                 match state.render(&window) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
@@ -69,11 +67,7 @@ fn main() {
             Event::MainEventsCleared => {
                 // RedrawRequested will only trigger once, unless we manually
                 // request it.
-
-                if state.game.last_frame.elapsed() > std::time::Duration::from_millis(10) {
-                    state.update();
-                    window.request_redraw();
-                }
+                window.request_redraw();
             },
             _ => {}
         }

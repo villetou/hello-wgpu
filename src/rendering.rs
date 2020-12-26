@@ -2,7 +2,7 @@ extern crate imgui_winit_support;
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
 
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 mod texture;
 mod camera;
@@ -86,13 +86,17 @@ const INDICES: &[u16] = &[
     2, 3, 4,
 ];
 
+pub struct GameState {
+    pub last_frame: Instant,
+    pub time_delta: Option<Duration>,
+    pub last_cursor: Option<(u32, u32)>,
+}
+
 pub struct ImguiState {
     pub ctx: imgui::Context,
     pub renderer: Renderer,
     pub platform: imgui_winit_support::WinitPlatform,
     demo_open: bool,
-    last_frame: Instant,
-    last_cursor: Option<(u32, u32)>,
 }
 
 pub struct State {
@@ -117,6 +121,7 @@ pub struct State {
     uniform_bind_group: wgpu::BindGroup,
     pub imgui: ImguiState,
     pub bg_color: [f32; 3],
+    pub game: GameState,
 }
 
 impl State {
@@ -274,12 +279,9 @@ impl State {
                 ..Default::default()
             };
 
-            let mut imgui_renderer = Renderer::new(&mut imgui, &device, &queue, renderer_config);
+            let imgui_renderer = Renderer::new(&mut imgui, &device, &queue, renderer_config);
 
-            let mut last_frame = Instant::now();
-            let mut last_cursor = None;
-
-            ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: false, last_frame, last_cursor}
+            ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: false}
         };
 
         let camera = camera::Camera {
@@ -406,11 +408,13 @@ impl State {
             uniform_bind_group,
             imgui,
             bg_color: [0.02, 0.02, 0.01],
+            game: GameState{last_frame: Instant::now(), time_delta: None, last_cursor: None}
         }
     }
 
     // To support resizing, we need to re-create the swap chain on resize event
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        println!("Resizing");
         self.size = new_size;
         self.sc_desc.width = new_size.width;
         self.sc_desc.height = new_size.height;
@@ -442,60 +446,23 @@ impl State {
     }
 
     pub fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.uniforms.update_view_proj(&self.camera);
-        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+        // Update time delta
+        let new_frame = Instant::now();
+        let dt = new_frame - self.game.last_frame;
+        self.game.time_delta = Some(dt);
+        self.game.last_frame = new_frame;
+
+        //if dt.as_millis() > 0 {
+        //    self.camera_controller.rotate_camera(&mut self.camera, 1.0 / dt.as_millis() as f32);
+        //    self.uniforms.update_view_proj(&self.camera);
+        //    self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+        //}
     }
 
-    // We need Texture and TextureView to render the image
-    pub fn render(&mut self, window: &Window) -> Result<(), wgpu::SwapChainError> {
-        let frame = self.swap_chain.get_current_frame()?.output;
-
-        // Imgui stuff
-        self.imgui.platform.prepare_frame(self.imgui.ctx.io_mut(), &window)
-                    .expect("Failed to prepare frame");
-
-        let ui = self.imgui.ctx.frame();
-
-        {
-            let window = imgui::Window::new(im_str!("Hello world!"));
-            let mut tmp_color = self.bg_color;
-            window
-                .always_auto_resize(true)
-                .build(&ui, || {
-
-                    let style = ui.push_style_vars([StyleVar::ItemSpacing([4.0, 4.0])].iter());
-
-                    ui.text(im_str!("Frametime: {:?}", 0.1337)); // delta_s
-                    let mouse_pos = ui.io().mouse_pos;
-                    ui.text(im_str!(
-                        "Mouse Position: ({:.0},{:.0})",
-                        mouse_pos[0],
-                        mouse_pos[1]
-                    ));
-                    ui.separator();
-                    if ColorEdit::new(im_str!("color_edit"), &mut tmp_color).build(&ui) {
-                        // state.notify_text = "*** Red button was clicked";
-                    }
-
-                    style.pop(&ui);
-                });
-
-            self.bg_color = tmp_color;
-
-            if self.imgui.demo_open == true {
-                ui.show_demo_window(&mut self.imgui.demo_open);
-            }
-        }
-
-        // The command encoder will
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        self.imgui.platform.prepare_render(&ui, &window);
+    pub fn create_render_encoder(&mut self, frame: &wgpu::SwapChainTexture, winit_window: &Window) -> wgpu::CommandEncoder {
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -521,13 +488,59 @@ impl State {
             render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..));
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);        
-            
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+
+            self.imgui.platform.prepare_frame(self.imgui.ctx.io_mut(), &winit_window)
+                .expect("Failed to prepare frame");
+
+            let ui = self.imgui.ctx.frame();
+
+            let window = imgui::Window::new(im_str!("Hello world!"));
+            let mut tmp_color = self.bg_color;
+            let time_delta_ms = match self.game.time_delta { Some(dur) => dur.as_millis(), None => 1 };
+
+            window
+                .always_auto_resize(true)
+                .build(&ui, || {
+
+                    let style = ui.push_style_vars([StyleVar::ItemSpacing([4.0, 4.0])].iter());
+
+                    ui.text(im_str!("Frametime: {:?}ms, FPS: {:?}", time_delta_ms, 1000 / time_delta_ms));
+                    let mouse_pos = ui.io().mouse_pos;
+                    ui.text(im_str!(
+                        "Mouse Position: ({:.0},{:.0})",
+                        mouse_pos[0],
+                        mouse_pos[1]
+                    ));
+                    ui.separator();
+                    if ColorEdit::new(im_str!("color_edit"), &mut tmp_color).build(&ui) {
+                        // state.notify_text = "*** Red button was clicked";
+                    }
+
+                    style.pop(&ui);
+                });
+
+            self.bg_color = tmp_color;
+
+            if self.imgui.demo_open == true {
+                ui.show_demo_window(&mut self.imgui.demo_open);
+            }
+
+            self.imgui.platform.prepare_render(&ui, &winit_window);
+
             self.imgui.renderer
                 .render(ui.render(), &self.queue, &self.device, &mut render_pass)
                 .expect("Rendering failed");
-
         }
+
+        encoder
+    }
+
+    // We need Texture and TextureView to render the image
+    pub fn render(&mut self, winit_window: &Window) -> Result<(), wgpu::SwapChainError> {
+        let frame = self.swap_chain.get_current_frame()?.output;
+
+        let encoder = self.create_render_encoder(&frame, winit_window);
 
         // We can't call encoder.finish() until we release mutable borrow (drop)
         self.queue.submit(std::iter::once(encoder.finish()));

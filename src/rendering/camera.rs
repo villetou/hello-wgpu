@@ -94,6 +94,17 @@ impl CameraController {
         }
     }
 
+    pub fn rotate_camera(&self, camera: &mut Camera, dt: f32) {
+        use cgmath::InnerSpace;
+        let forward = camera.target - camera.eye;
+        let forward_norm = forward.normalize();
+        let forward_mag = forward.magnitude();
+
+        let right = forward_norm.cross(camera.up);
+
+        camera.eye = camera.target - (forward + right * dt).normalize() * forward_mag;
+    }
+
     pub fn update_camera(&self, camera: &mut Camera) {
         use cgmath::InnerSpace;
         let forward = camera.target - camera.eye;
