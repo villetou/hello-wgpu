@@ -135,7 +135,7 @@ impl State {
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::Default,
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
             })
             .await
@@ -177,25 +177,9 @@ impl State {
             format: wgpu::TextureFormat::Bgra8UnormSrgb, // The screen format that is most widely available, should use the screens native format but there's no way to query it yet
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Immediate, // Immediate, Mailbox, Fifo (listen to VBlank or not?)
+            present_mode: wgpu::PresentMode::Immediate,
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-        // PresentModes
-        // Immediate
-        // The presentation engine does **not** wait for a vertical blanking period and
-        // the request is presented immediately. This is a low-latency presentation mode,
-        // but visible tearing may be observed. Will fallback to `Fifo` if unavailable on the
-        // selected  platform and backend. Not optimal for mobile.
-        // Mailbox
-        // The presentation engine waits for the next vertical blanking period to update
-        // the current image, but frames may be submitted without delay. This is a low-latency
-        // presentation mode and visible tearing will **not** be observed. Will fallback to `Fifo`
-        // if unavailable on the selected platform and backend. Not optimal for mobile.
-
-        // Fifo
-        // The presentation engine waits for the next vertical blanking period to update
-        // the current image. The framerate will be capped at the display refresh rate,
-        // corresponding to the `VSync`. Tearing cannot be observed. Optimal for mobile.
 
         let diffuse_bytes = include_bytes!("happy-tree.png");
         let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
@@ -452,11 +436,11 @@ impl State {
         self.game.time_delta = Some(dt);
         self.game.last_frame = new_frame;
 
-        //if dt.as_millis() > 0 {
-        //    self.camera_controller.rotate_camera(&mut self.camera, 1.0 / dt.as_millis() as f32);
-        //    self.uniforms.update_view_proj(&self.camera);
-        //    self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
-        //}
+        if dt.as_millis() > 0 {
+            self.camera_controller.rotate_camera(&mut self.camera, 1.0 / dt.as_millis() as f32);
+            self.uniforms.update_view_proj(&self.camera);
+            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+        }
     }
 
     pub fn create_render_encoder(&mut self, frame: &wgpu::SwapChainTexture, winit_window: &Window) -> wgpu::CommandEncoder {
@@ -503,7 +487,7 @@ impl State {
                 .always_auto_resize(true)
                 .build(&ui, || {
 
-                    let style = ui.push_style_vars([StyleVar::ItemSpacing([4.0, 4.0])].iter());
+                    let style = ui.push_style_vars([StyleVar::ItemSpacing([5.0, 5.0])].iter());
 
                     ui.text(im_str!("Frametime: {:?}ms, FPS: {:?}", time_delta_ms, 1000 / time_delta_ms));
                     let mouse_pos = ui.io().mouse_pos;
