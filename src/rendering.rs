@@ -352,11 +352,6 @@ impl State {
 
         let mut uniforms = Uniforms::new();
 
-        for elem in uniforms.sprite_rects.iter() {
-            println!("Sprite coordinates");
-            println!("{} {} {} {}", elem[0], elem[1], elem[2], elem[3]);
-        }
-
         uniforms.update_view_proj(&camera);
 
         let uniform_buffer = device.create_buffer_init(
