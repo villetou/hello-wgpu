@@ -158,6 +158,7 @@ pub struct GameState {
     pub last_cursor: Option<(u32, u32)>,
     pub current_sprite_frame: u32,
     pub sprite_frame_count: u32,
+    pub last_sprite_frame_time: Instant,
 }
 
 pub struct ImguiState {
@@ -341,7 +342,7 @@ impl State {
 
         let camera = camera::Camera {
             center: cgmath::Vector2::new(0.0, 0.0),
-            height: 5.0,
+            height: 3.0,
             aspect: sc_desc.width as f32 / sc_desc.height as f32,
             znear: -1.0,
             zfar: 100.0,
@@ -394,10 +395,9 @@ impl State {
 
         let mut instances: Vec<Instance> = Vec::<Instance>::new();
 
-        instances.push(Instance{ position: cgmath::Vector3 {x: -0.5, y: -0.5, z: 0.0}, frame: 0 });
-        instances.push(Instance{ position: cgmath::Vector3 {x: -0.5, y: 0.5, z: 0.0}, frame: 1 });
-        instances.push(Instance{ position: cgmath::Vector3 {x: 0.5, y: 0.5, z: 0.0}, frame: 2 });
-        instances.push(Instance{ position: cgmath::Vector3 {x: 0.5, y: -0.5, z: 0.0}, frame: 3 });
+        for i in 0..1 {
+            instances.push(Instance{ position: cgmath::Vector3 {x: -1.0 + (i % 6) as f32, y: (i / 6) as f32, z: 0.0}, frame: i % 24 });
+        }
 
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
 
@@ -405,7 +405,7 @@ impl State {
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsage::VERTEX,
+                usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
             }
         );
 
@@ -482,7 +482,7 @@ impl State {
             uniform_bind_group,
             imgui,
             bg_color: [0.02, 0.02, 0.01],
-            game: GameState{last_frame: Instant::now(), time_delta: None, last_cursor: None, current_sprite_frame: 0, sprite_frame_count: 4},
+            game: GameState{last_frame: Instant::now(), time_delta: None, last_cursor: None, current_sprite_frame: 0, sprite_frame_count: 24, last_sprite_frame_time: Instant::now()},
             instances,
             instance_buffer,
         }
@@ -529,10 +529,17 @@ impl State {
         self.game.last_frame = new_frame;
 
         if dt.as_millis() > 0 {
-            self.game.current_sprite_frame = (self.game.current_sprite_frame + 1) % self.game.sprite_frame_count;
             self.camera_controller.update_camera(&mut self.camera);
             self.uniforms.update_view_proj(&self.camera);
             self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+
+            if self.game.last_sprite_frame_time.elapsed().as_millis() > 100 {
+                self.game.current_sprite_frame = (self.game.current_sprite_frame + 1) % self.game.sprite_frame_count;
+                self.instances[0].frame = self.game.current_sprite_frame;
+                let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+                self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
+                self.game.last_sprite_frame_time = Instant::now();
+            }
         }
     }
 
