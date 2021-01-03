@@ -2,17 +2,35 @@
 #version 450
 
 layout(location=0) in vec3 a_position;
-layout(location=1) in vec2 a_tex_coords;
+layout(location=5) in mat4 model_matrix;
+layout(location=9) in uint frame;
 
 layout(location=0) out vec2 v_tex_coords;
 
-// NEW!
-layout(set=1, binding=0) // 1.
+layout(set=1, binding=0)
 uniform Uniforms {
-    mat4 u_view_proj; // 2.
+    mat4 u_view_proj;
+    vec4 sprite_coordinates[24];
 };
 
 void main() {
-    v_tex_coords = a_tex_coords;
-    gl_Position = u_view_proj * vec4(a_position, 1.0);
+    vec2 tex_coords = vec2(0, 0);
+
+    switch(gl_VertexIndex) {
+        case 0:
+            tex_coords = vec2(sprite_coordinates[frame].x, sprite_coordinates[frame].w);
+            break;
+        case 1:
+            tex_coords = vec2(sprite_coordinates[frame].z, sprite_coordinates[frame].y);
+            break;
+        case 2:
+            tex_coords = vec2(sprite_coordinates[frame].x, sprite_coordinates[frame].y);
+            break;
+        case 3:
+            tex_coords = vec2(sprite_coordinates[frame].z, sprite_coordinates[frame].w);
+            break;
+    }
+
+    v_tex_coords = tex_coords;
+    gl_Position = u_view_proj * model_matrix * vec4(a_position, 1.0);
 }

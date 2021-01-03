@@ -18,7 +18,72 @@ use wgpu::util::DeviceExt;
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 3],
-    tex_coords: [f32; 2],
+}
+
+pub struct Instance {
+    position: cgmath::Vector3<f32>,
+    //rotation: cgmath::Quaternion<f32>,
+    frame: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceRaw {
+    model: [[f32; 4]; 4],
+    frame: u32,
+}
+
+impl Instance {
+    fn to_raw(&self) -> InstanceRaw {
+        InstanceRaw {
+            model: (cgmath::Matrix4::from_translation(self.position)).into(),
+            frame: self.frame,
+        }
+    }
+}
+
+impl InstanceRaw {
+    fn desc<'a>() -> wgpu::VertexBufferDescriptor<'a> {
+        use std::mem;
+        wgpu::VertexBufferDescriptor {
+            stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            // We need to switch from using a step mode of Vertex to Instance
+            // This means that our shaders will only change to use the next
+            // instance when the shader starts processing a new instance
+            step_mode: wgpu::InputStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttributeDescriptor {
+                    offset: 0,
+                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
+                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float4,
+                },
+                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
+                // for each vec4. We don't have to do this in code though.
+                wgpu::VertexAttributeDescriptor {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float4,
+                },
+                wgpu::VertexAttributeDescriptor {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float4,
+                },
+                wgpu::VertexAttributeDescriptor {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float4,
+                },
+                wgpu::VertexAttributeDescriptor {
+                    offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Uint,
+                },
+            ],
+        }
+    }
 }
 
 #[repr(C)]
@@ -28,13 +93,21 @@ struct Uniforms {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
     view_proj: [[f32; 4]; 4],
+    sprite_rects: [[f32; 4]; 24],
 }
 
 impl Uniforms {
     fn new() -> Self {
+        let mut sprite_rects: [[f32; 4]; 24] = [[0.0, 0.0, 0.0, 0.0]; 24];
+
+        for i in 0..24 {
+            sprite_rects[i] = [(i % 6) as f32 / 6.0, (i / 6) as f32 / 4.0, ((i % 6) + 1) as f32 / 6.0, ((i / 6) + 1) as f32 / 4.0];
+        }
+
         use cgmath::SquareMatrix;
         Self {
             view_proj: cgmath::Matrix4::identity().into(),
+            sprite_rects,
         }
     }
 
@@ -48,7 +121,7 @@ impl Uniforms {
  * wgpu::VertexBufferDescriptor {
     stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
     step_mode: wgpu::InputStepMode::Vertex,
-    attributes: &wgpu::vertex_attr_array![0 => Float3, 1 => Float3],
+    attributes: &wgpu::vertex_attr_array![0 => Float3, 1 => Float3, ...],
 } */
 impl Vertex {
     fn desc<'a>() -> wgpu::VertexBufferDescriptor<'a> {
@@ -61,35 +134,30 @@ impl Vertex {
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float3,
                 },
-                wgpu::VertexAttributeDescriptor {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float2,
-                }
             ]
         }
     }
 }
 
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.0868241, 0.49240386, 0.0], tex_coords: [0.4131759, 0.00759614], },
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], tex_coords: [0.0048659444, 0.43041354], },
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], tex_coords: [0.28081453, 0.949397057], },
-    Vertex { position: [0.35966998, -0.3473291, 0.0], tex_coords: [0.85967, 0.84732911], },
-    Vertex { position: [0.44147372, 0.2347359, 0.0], tex_coords: [0.9414737, 0.2652641], },
+    Vertex { position: [-0.5, -0.5, 0.0] },
+    Vertex { position: [0.5, 0.5, 0.0] },
+    Vertex { position: [-0.5, 0.5, 0.0] },
+    Vertex { position: [0.5, -0.5, 0.0] },
 ];
 
 
 const INDICES: &[u16] = &[
-    0, 1, 4,
-    1, 2, 4,
-    2, 3, 4,
+    0, 1, 2,
+    0, 3, 1,
 ];
 
 pub struct GameState {
     pub last_frame: Instant,
     pub time_delta: Option<Duration>,
     pub last_cursor: Option<(u32, u32)>,
+    pub current_sprite_frame: u32,
+    pub sprite_frame_count: u32,
 }
 
 pub struct ImguiState {
@@ -122,6 +190,8 @@ pub struct State {
     pub imgui: ImguiState,
     pub bg_color: [f32; 3],
     pub game: GameState,
+    pub instances: Vec<Instance>,
+    pub instance_buffer: wgpu::Buffer,
 }
 
 impl State {
@@ -181,8 +251,9 @@ impl State {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let diffuse_bytes = include_bytes!("happy-tree.png");
-        let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
+        // 6x4 sprites in 600x400 pixels
+        let diffuse_bytes = include_bytes!("trump_run.png");
+        let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "trump_run").unwrap();
 
         let texture_bind_group_layout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -281,6 +352,12 @@ impl State {
         let camera_controller = camera::CameraController::new(0.2);
 
         let mut uniforms = Uniforms::new();
+
+        for elem in uniforms.sprite_rects.iter() {
+            println!("Sprite coordinates");
+            println!("{} {} {} {}", elem[0], elem[1], elem[2], elem[3]);
+        }
+
         uniforms.update_view_proj(&camera);
 
         let uniform_buffer = device.create_buffer_init(
@@ -301,7 +378,7 @@ impl State {
                         min_binding_size: None,
                     },
                     count: None,
-                }
+                },
             ],
             label: Some("uniform_bind_group_layout"),
         });
@@ -317,6 +394,22 @@ impl State {
             label: Some("uniform_bind_group"),
         });
 
+        let mut instances: Vec<Instance> = Vec::<Instance>::new();
+
+        instances.push(Instance{ position: cgmath::Vector3 {x: -0.5, y: -0.5, z: 0.0}, frame: 0 });
+        instances.push(Instance{ position: cgmath::Vector3 {x: -0.5, y: 0.5, z: 0.0}, frame: 1 });
+        instances.push(Instance{ position: cgmath::Vector3 {x: 0.5, y: 0.5, z: 0.0}, frame: 2 });
+        instances.push(Instance{ position: cgmath::Vector3 {x: 0.5, y: -0.5, z: 0.0}, frame: 3 });
+
+        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsage::VERTEX,
+            }
+        );
 
         let vs_module = device.create_shader_module(wgpu::include_spirv!("shader.vert.spv"));
         let fs_module = device.create_shader_module(wgpu::include_spirv!("shader.frag.spv"));
@@ -361,9 +454,7 @@ impl State {
             depth_stencil_state: None,
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[
-                    Vertex::desc(),
-                ],
+                vertex_buffers: &[Vertex::desc(), InstanceRaw::desc()],
             },
             sample_count: 1,
             sample_mask: !0,
@@ -384,6 +475,7 @@ impl State {
             index_buffer,
             num_indices,
             diffuse_bind_group,
+
             diffuse_texture,
             camera,
             camera_controller,
@@ -392,7 +484,9 @@ impl State {
             uniform_bind_group,
             imgui,
             bg_color: [0.02, 0.02, 0.01],
-            game: GameState{last_frame: Instant::now(), time_delta: None, last_cursor: None}
+            game: GameState{last_frame: Instant::now(), time_delta: None, last_cursor: None, current_sprite_frame: 0, sprite_frame_count: 4},
+            instances,
+            instance_buffer,
         }
     }
 
@@ -437,9 +531,13 @@ impl State {
         self.game.last_frame = new_frame;
 
         if dt.as_millis() > 0 {
-            self.camera_controller.rotate_camera(&mut self.camera, 1.0 / dt.as_millis() as f32);
-            self.uniforms.update_view_proj(&self.camera);
-            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+            self.game.current_sprite_frame = (self.game.current_sprite_frame + 1) % self.game.sprite_frame_count;
+
+
+
+            // self.camera_controller.rotate_camera(&mut self.camera, 1.0 / dt.as_millis() as f32);
+            // self.uniforms.update_view_proj(&self.camera);
+            // self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
         }
     }
 
@@ -471,8 +569,9 @@ impl State {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..));
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
 
             self.imgui.platform.prepare_frame(self.imgui.ctx.io_mut(), &winit_window)
                 .expect("Failed to prepare frame");
