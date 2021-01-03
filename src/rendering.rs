@@ -340,12 +340,10 @@ impl State {
         };
 
         let camera = camera::Camera {
-            eye: (0.0, 1.0, 2.0).into(), // +z is out of the screen
-            target: (0.0, 0.0, 0.0).into(),
-            up: cgmath::Vector3::unit_y(),
+            center: cgmath::Vector2::new(0.0, 0.0),
+            height: 5.0,
             aspect: sc_desc.width as f32 / sc_desc.height as f32,
-            fovy: 45.0,
-            znear: 0.1,
+            znear: -1.0,
             zfar: 100.0,
         };
 
@@ -532,12 +530,9 @@ impl State {
 
         if dt.as_millis() > 0 {
             self.game.current_sprite_frame = (self.game.current_sprite_frame + 1) % self.game.sprite_frame_count;
-
-
-
-            // self.camera_controller.rotate_camera(&mut self.camera, 1.0 / dt.as_millis() as f32);
-            // self.uniforms.update_view_proj(&self.camera);
-            // self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+            self.camera_controller.update_camera(&mut self.camera);
+            self.uniforms.update_view_proj(&self.camera);
+            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
         }
     }
 
