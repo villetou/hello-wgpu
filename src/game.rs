@@ -5,6 +5,12 @@ use winit::{
 
 use crate::camera::{Camera, CameraController};
 
+pub struct Instance {
+    pub position: cgmath::Vector3<f32>,
+    //rotation: cgmath::Quaternion<f32>,
+    pub frame: u32,
+}
+
 pub struct GameState {
     pub last_frame: Instant,
     pub time_delta: Option<Duration>,
@@ -14,7 +20,10 @@ pub struct GameState {
     pub last_sprite_frame_time: Instant,
     pub camera_controller: CameraController,
     pub camera: Camera,
+    pub instances: Vec<Instance>,
 }
+
+
 
 impl GameState {
     pub fn new () -> GameState {
@@ -26,6 +35,9 @@ impl GameState {
             zfar: 100.0,
         };
 
+        let mut instances: Vec<Instance> = Vec::<Instance>::new();
+        instances.push(Instance{ position: cgmath::Vector3 {x: 0.0, y: 0.0, z: 0.0}, frame: 0 });
+
         GameState {
             last_frame: Instant::now(),
             time_delta: Some(Instant::now().elapsed()),
@@ -35,6 +47,7 @@ impl GameState {
             last_sprite_frame_time: Instant::now(),
             camera_controller: CameraController::new(0.2),
             camera,
+            instances,
         }
     }
 
@@ -54,6 +67,7 @@ impl GameState {
             if self.last_sprite_frame_time.elapsed().as_millis() > 60 {
                 self.current_sprite_frame = (self.current_sprite_frame + 1) % self.sprite_frame_count;
                 self.last_sprite_frame_time = Instant::now();
+                self.instances[0].frame = self.current_sprite_frame;
             }
         }
     }

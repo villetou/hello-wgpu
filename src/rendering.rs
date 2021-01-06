@@ -19,11 +19,7 @@ struct Vertex {
     position: [f32; 3],
 }
 
-pub struct Instance {
-    position: cgmath::Vector3<f32>,
-    //rotation: cgmath::Quaternion<f32>,
-    frame: u32,
-}
+
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -32,16 +28,14 @@ pub struct InstanceRaw {
     frame: u32,
 }
 
-impl Instance {
-    fn to_raw(&self) -> InstanceRaw {
+impl InstanceRaw {
+    fn from_instance(instance: &crate::game::Instance) -> InstanceRaw {
         InstanceRaw {
-            model: (cgmath::Matrix4::from_translation(self.position)).into(),
-            frame: self.frame,
+            model: (cgmath::Matrix4::from_translation(instance.position)).into(),
+            frame: instance.frame,
         }
     }
-}
 
-impl InstanceRaw {
     fn desc<'a>() -> wgpu::VertexBufferDescriptor<'a> {
         use std::mem;
         wgpu::VertexBufferDescriptor {
@@ -179,7 +173,6 @@ pub struct State {
     pub imgui: ImguiState,
     pub bg_color: [f32; 3],
     pub game: GameState,
-    pub instances: Vec<Instance>,
     pub instance_buffer: wgpu::Buffer,
 }
 
@@ -368,12 +361,8 @@ impl State {
             label: Some("uniform_bind_group"),
         });
 
-        let mut instances: Vec<Instance> = Vec::<Instance>::new();
 
-
-        instances.push(Instance{ position: cgmath::Vector3 {x: 0.0, y: 0.0, z: 0.0}, frame: 0 });
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_data = game.instances.iter().map(InstanceRaw::from_instance).collect::<Vec<_>>();
 
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -462,7 +451,6 @@ impl State {
             imgui,
             bg_color: [0.02, 0.02, 0.01],
             game,
-            instances,
             instance_buffer,
         }
     }
@@ -506,8 +494,7 @@ impl State {
         self.uniforms.update_view_proj(self.game.camera.build_view_projection_matrix().into());
         self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
 
-        self.instances[0].frame = self.game.current_sprite_frame;
-        let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_data = self.game.instances.iter().map(InstanceRaw::from_instance).collect::<Vec<_>>();
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
     }
 
@@ -541,7 +528,7 @@ impl State {
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..));
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.game.instances.len() as _);
 
             self.imgui.platform.prepare_frame(self.imgui.ctx.io_mut(), &winit_window)
                 .expect("Failed to prepare frame");
