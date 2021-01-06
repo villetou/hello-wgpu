@@ -1,2 +1,4 @@
 /target
 .spv
+src/shader.vert.spv
+src/shader.frag.spv

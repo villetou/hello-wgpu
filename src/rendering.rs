@@ -1,11 +1,10 @@
 extern crate imgui_winit_support;
+
+use crate::texture;
+use crate::game::GameState;
+
 use imgui::*;
 use imgui_wgpu::{Renderer, RendererConfig};
-
-use std::time::{Instant, Duration};
-
-mod texture;
-mod camera;
 
 use winit::{
     event::*,
@@ -111,8 +110,8 @@ impl Uniforms {
         }
     }
 
-    fn update_view_proj(&mut self, camera: &camera::Camera) {
-        self.view_proj = camera.build_view_projection_matrix().into();
+    fn update_view_proj(&mut self, view_proj: [[f32; 4]; 4]) {
+        self.view_proj = view_proj;
     }
 }
 
@@ -152,15 +151,6 @@ const INDICES: &[u16] = &[
     0, 3, 1,
 ];
 
-pub struct GameState {
-    pub last_frame: Instant,
-    pub time_delta: Option<Duration>,
-    pub last_cursor: Option<(u32, u32)>,
-    pub current_sprite_frame: u32,
-    pub sprite_frame_count: u32,
-    pub last_sprite_frame_time: Instant,
-}
-
 pub struct ImguiState {
     pub ctx: imgui::Context,
     pub renderer: Renderer,
@@ -183,11 +173,9 @@ pub struct State {
     pub num_indices: u32,
     pub diffuse_texture: texture::Texture,
     pub diffuse_bind_group: wgpu::BindGroup,
-    camera: camera::Camera,
-    camera_controller: camera::CameraController,
     uniforms: Uniforms,
-    uniform_buffer: wgpu::Buffer,
-    uniform_bind_group: wgpu::BindGroup,
+    pub uniform_buffer: wgpu::Buffer,
+    pub uniform_bind_group: wgpu::BindGroup,
     pub imgui: ImguiState,
     pub bg_color: [f32; 3],
     pub game: GameState,
@@ -340,19 +328,11 @@ impl State {
             ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: false}
         };
 
-        let camera = camera::Camera {
-            center: cgmath::Vector2::new(0.0, 0.0),
-            height: 3.0,
-            aspect: sc_desc.width as f32 / sc_desc.height as f32,
-            znear: -1.0,
-            zfar: 100.0,
-        };
-
-        let camera_controller = camera::CameraController::new(0.2);
-
         let mut uniforms = Uniforms::new();
 
-        uniforms.update_view_proj(&camera);
+        let game = GameState::new();
+
+        uniforms.update_view_proj(game.camera.build_view_projection_matrix().into());
 
         let uniform_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -390,9 +370,8 @@ impl State {
 
         let mut instances: Vec<Instance> = Vec::<Instance>::new();
 
-        for i in 0..1 {
-            instances.push(Instance{ position: cgmath::Vector3 {x: -1.0 + (i % 6) as f32, y: (i / 6) as f32, z: 0.0}, frame: i % 24 });
-        }
+
+        instances.push(Instance{ position: cgmath::Vector3 {x: 0.0, y: 0.0, z: 0.0}, frame: 0 });
 
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
 
@@ -476,16 +455,13 @@ impl State {
             index_buffer,
             num_indices,
             diffuse_bind_group,
-
             diffuse_texture,
-            camera,
-            camera_controller,
             uniforms,
             uniform_buffer,
             uniform_bind_group,
             imgui,
             bg_color: [0.02, 0.02, 0.01],
-            game: GameState{last_frame: Instant::now(), time_delta: None, last_cursor: None, current_sprite_frame: 0, sprite_frame_count: 24, last_sprite_frame_time: Instant::now()},
+            game,
             instances,
             instance_buffer,
         }
@@ -502,7 +478,7 @@ impl State {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event);
+        self.game.input(event);
 
         match event {
             WindowEvent::CursorMoved { position, .. } => {
@@ -525,25 +501,14 @@ impl State {
     }
 
     pub fn update(&mut self) {
-        // Update time delta
-        let new_frame = Instant::now();
-        let dt = new_frame - self.game.last_frame;
-        self.game.time_delta = Some(dt);
-        self.game.last_frame = new_frame;
+        self.game.update();
 
-        if dt.as_millis() > 0 {
-            self.camera_controller.update_camera(&mut self.camera);
-            self.uniforms.update_view_proj(&self.camera);
-            self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+        self.uniforms.update_view_proj(self.game.camera.build_view_projection_matrix().into());
+        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
 
-            if self.game.last_sprite_frame_time.elapsed().as_millis() > 100 {
-                self.game.current_sprite_frame = (self.game.current_sprite_frame + 1) % self.game.sprite_frame_count;
-                self.instances[0].frame = self.game.current_sprite_frame;
-                let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-                self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
-                self.game.last_sprite_frame_time = Instant::now();
-            }
-        }
+        self.instances[0].frame = self.game.current_sprite_frame;
+        let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
     }
 
     pub fn create_render_encoder(&mut self, frame: &wgpu::SwapChainTexture, winit_window: &Window) -> wgpu::CommandEncoder {
@@ -593,7 +558,9 @@ impl State {
 
                     let style = ui.push_style_vars([StyleVar::ItemSpacing([5.0, 5.0])].iter());
 
-                    ui.text(im_str!("Frametime: {:?}ms, FPS: {:?}", time_delta_ms, 1000 / time_delta_ms));
+                    let fps = if time_delta_ms > 0 { 1000 / time_delta_ms } else { 0 };
+
+                    ui.text(im_str!("Frametime: {:?}ms, FPS: {:?}", time_delta_ms, fps));
                     let mouse_pos = ui.io().mouse_pos;
                     ui.text(im_str!(
                         "Mouse Position: ({:.0},{:.0})",

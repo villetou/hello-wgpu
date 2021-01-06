@@ -1,6 +1,9 @@
 extern crate imgui_winit_support;
 
 mod rendering;
+mod game;
+mod texture;
+mod camera;
 
 use crate::rendering::State;
 use winit::{
