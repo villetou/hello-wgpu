@@ -4,6 +4,7 @@ mod rendering;
 mod game;
 mod texture;
 mod camera;
+mod controller;
 
 use crate::rendering::State;
 use winit::{
@@ -11,6 +12,8 @@ use winit::{
     event_loop::{EventLoop, ControlFlow},
     window::{WindowBuilder},
 };
+
+use game::*;
 
 fn main() {
     env_logger::init();
@@ -23,15 +26,21 @@ fn main() {
     // Since main can't be async, we're going to need to block
     let mut state = futures::executor::block_on(State::new(&window));
 
+    let mut game = game::GameState::new();
+    
+    // Init
+    state.uniforms.update_view_proj(game.camera.build_view_projection_matrix().into());
+
+    
+
     event_loop.run(move |event, _, control_flow| {
 
         //*control_flow = ControlFlow::WaitUntil(std::time::Instant::now() + std::time::Duration::from_millis(5));
-
         match event {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == window.id() => if !state.input(event) {
+            } if window_id == window.id() => if !state.input(event) && !game.input(event) {
                     match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::KeyboardInput {
@@ -59,7 +68,7 @@ fn main() {
                 
             }
             Event::RedrawRequested(_) => {
-                match state.render(&window) {
+                match state.render(&game, &window) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
                     Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
@@ -73,8 +82,9 @@ fn main() {
                 // RedrawRequested will only trigger once, unless we manually
                 // request it.
 
-                if state.game.last_frame.elapsed() > std::time::Duration::from_millis(10) {
-                    state.update();
+                if game.last_frame.elapsed() > std::time::Duration::from_millis(10) {
+                    game.update();
+                    state.update(&game);
                     window.request_redraw();
                 }
             },

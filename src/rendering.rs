@@ -82,7 +82,7 @@ impl InstanceRaw {
 #[repr(C)]
 // This is so we can store this in a buffer
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct Uniforms {
+pub struct Uniforms {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
     view_proj: [[f32; 4]; 4],
@@ -104,7 +104,7 @@ impl Uniforms {
         }
     }
 
-    fn update_view_proj(&mut self, view_proj: [[f32; 4]; 4]) {
+    pub fn update_view_proj(&mut self, view_proj: [[f32; 4]; 4]) {
         self.view_proj = view_proj;
     }
 }
@@ -167,12 +167,11 @@ pub struct State {
     pub num_indices: u32,
     pub diffuse_texture: texture::Texture,
     pub diffuse_bind_group: wgpu::BindGroup,
-    uniforms: Uniforms,
+    pub uniforms: Uniforms,
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
     pub imgui: ImguiState,
     pub bg_color: [f32; 3],
-    pub game: GameState,
     pub instance_buffer: wgpu::Buffer,
 }
 
@@ -321,11 +320,7 @@ impl State {
             ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: false}
         };
 
-        let mut uniforms = Uniforms::new();
-
-        let game = GameState::new();
-
-        uniforms.update_view_proj(game.camera.build_view_projection_matrix().into());
+        let uniforms = Uniforms::new();
 
         let uniform_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -361,13 +356,10 @@ impl State {
             label: Some("uniform_bind_group"),
         });
 
-
-        let instance_data = game.instances.iter().map(InstanceRaw::from_instance).collect::<Vec<_>>();
-
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
-                contents: bytemuck::cast_slice(&instance_data),
+                contents: &[],
                 usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
             }
         );
@@ -450,7 +442,6 @@ impl State {
             uniform_bind_group,
             imgui,
             bg_color: [0.02, 0.02, 0.01],
-            game,
             instance_buffer,
         }
     }
@@ -466,39 +457,25 @@ impl State {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.game.input(event);
 
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 self.pointer = (position.x, position.y);
                 true
             }
-            WindowEvent::KeyboardInput { input, .. } => match input {
-                KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Space),
-                    ..
-                } => {
-                    self.draw_challenge = !self.draw_challenge;
-                    true
-                }
-                _ => false,
-            },
             _ => false,
         }
     }
 
-    pub fn update(&mut self) {
-        self.game.update();
-
-        self.uniforms.update_view_proj(self.game.camera.build_view_projection_matrix().into());
+    pub fn update(&mut self, game: &GameState) {
+        self.uniforms.update_view_proj(game.camera.build_view_projection_matrix().into());
         self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
 
-        let instance_data = self.game.instances.iter().map(InstanceRaw::from_instance).collect::<Vec<_>>();
+        let instance_data = game.instances.iter().map(InstanceRaw::from_instance).collect::<Vec<_>>();
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
     }
 
-    pub fn create_render_encoder(&mut self, frame: &wgpu::SwapChainTexture, winit_window: &Window) -> wgpu::CommandEncoder {
+    pub fn create_render_encoder(&mut self, game: &GameState, frame: &wgpu::SwapChainTexture, winit_window: &Window) -> wgpu::CommandEncoder {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
@@ -528,7 +505,7 @@ impl State {
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..));
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.game.instances.len() as _);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..game.instances.len() as _);
 
             self.imgui.platform.prepare_frame(self.imgui.ctx.io_mut(), &winit_window)
                 .expect("Failed to prepare frame");
@@ -537,7 +514,7 @@ impl State {
 
             let window = imgui::Window::new(im_str!("Hello world!"));
             let mut tmp_color = self.bg_color;
-            let time_delta_ms = match self.game.time_delta { Some(dur) => dur.as_millis(), None => 1 };
+            let time_delta_ms = match game.time_delta { Some(dur) => dur.as_millis(), None => 1 };
 
             window
                 .always_auto_resize(true)
@@ -579,10 +556,10 @@ impl State {
     }
 
     // We need Texture and TextureView to render the image
-    pub fn render(&mut self, winit_window: &Window) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(&mut self, game: &GameState, winit_window: &Window) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
 
-        let encoder = self.create_render_encoder(&frame, winit_window);
+        let encoder = self.create_render_encoder(&game, &frame, winit_window);
 
         // We can't call encoder.finish() until we release mutable borrow (drop)
         self.queue.submit(std::iter::once(encoder.finish()));
