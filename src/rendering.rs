@@ -177,7 +177,7 @@ pub struct State {
 
 impl State {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: &Window) -> Self {
+    pub async fn new(window: &Window, game: &GameState) -> Self {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -320,7 +320,9 @@ impl State {
             ImguiState{ctx: imgui, renderer: imgui_renderer, platform, demo_open: false}
         };
 
-        let uniforms = Uniforms::new();
+        let mut uniforms = Uniforms::new();
+
+        uniforms.update_view_proj(game.camera.build_view_projection_matrix().into());
 
         let uniform_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -356,10 +358,12 @@ impl State {
             label: Some("uniform_bind_group"),
         });
 
+        let instance_data = game.instances.iter().map(InstanceRaw::from_instance).collect::<Vec<_>>();
+
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
-                contents: &[],
+                contents: bytemuck::cast_slice(&instance_data),
                 usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
             }
         );

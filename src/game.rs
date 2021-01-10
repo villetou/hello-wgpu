@@ -6,15 +6,15 @@ use winit::{
 use crate::camera::{Camera, CameraController};
 use crate::controller::Controller;
 
-pub struct Animator<'a> {
+pub struct Animator {
     current_frame: usize,
     current_frame_index: usize,
     last_frame_time: std::time::Instant,
-    animation: &'a Animation
+    animation: Animation
 }
 
-impl<'a> Animator<'_> {
-    pub fn new(animation: &'a Animation) -> Animator<'a> {
+impl Animator {
+    pub fn new(animation: Animation) -> Animator {
         Animator {
             current_frame_index: 0,
             current_frame: animation.frames[0],
@@ -52,14 +52,14 @@ pub enum Direction {
     //NW,
 }
 
-pub struct Instance<'a> {
+pub struct Instance {
     pub position: cgmath::Vector3<f32>,
     pub direction: Direction,
     pub frame: u32,
-    pub animator: Animator<'a>
+    pub animator: Animator
 }
 
-pub struct GameState<'a> {
+pub struct GameState {
     pub last_frame: Instant,
     pub time_delta: Option<Duration>,
     pub last_cursor: Option<(u32, u32)>,
@@ -68,14 +68,14 @@ pub struct GameState<'a> {
     pub last_sprite_frame_time: Instant,
     pub camera_controller: CameraController,
     pub camera: Camera,
-    pub instances: Vec<Instance<'a>>,
+    pub instances: Vec<Instance>,
     pub controller: Controller,
     pub animations: Vec<Animation>,
 }
 
 
-impl<'a> GameState<'a> {
-    pub fn new () -> GameState<'a> {
+impl GameState {
+    pub fn new () -> GameState {
         let camera = Camera {
             center: cgmath::Vector2::new(0.0, 0.0),
             height: 3.0,
@@ -98,7 +98,7 @@ impl<'a> GameState<'a> {
                 position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
                 direction: Direction::N,
                 frame: 0,
-                animator: Animator::new(&animations[0])
+                animator: Animator::new(animations[0].clone())
             }
         );
 

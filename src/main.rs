@@ -23,14 +23,10 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
-    // Since main can't be async, we're going to need to block
-    let mut state = futures::executor::block_on(State::new(&window));
-
     let mut game = game::GameState::new();
-    
-    // Init
-    state.uniforms.update_view_proj(game.camera.build_view_projection_matrix().into());
 
+    // Since main can't be async, we're going to need to block
+    let mut state = futures::executor::block_on(State::new(&window, &game));
     
 
     event_loop.run(move |event, _, control_flow| {
