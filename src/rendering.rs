@@ -25,14 +25,14 @@ struct Vertex {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct InstanceRaw {
     model: [[f32; 4]; 4],
-    frame: u32,
+    frame: usize,
 }
 
 impl InstanceRaw {
     fn from_instance(instance: &crate::game::Instance) -> InstanceRaw {
         InstanceRaw {
             model: (cgmath::Matrix4::from_translation(instance.position)).into(),
-            frame: instance.frame,
+            frame: instance.animator.current_frame,
         }
     }
 

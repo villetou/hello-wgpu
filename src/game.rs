@@ -7,7 +7,7 @@ use crate::camera::{Camera, CameraController};
 use crate::controller::Controller;
 
 pub struct Animator {
-    current_frame: usize,
+    pub current_frame: usize,
     current_frame_index: usize,
     last_frame_time: std::time::Instant,
     animation: Animation
@@ -162,7 +162,10 @@ impl GameState {
         }
         if dt.as_millis() > 0 {
             self.camera_controller.update_camera(&mut self.camera);
-
+            
+            for i in &mut self.instances {
+                i.animator.update();
+            }
         }
     }
 }
