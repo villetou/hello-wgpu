@@ -3,8 +3,10 @@ use winit::{
     event::*,
 };
 
-use crate::camera::{Camera, CameraController};
+use crate::camera::{Camera};
 use crate::controller::Controller;
+
+mod ai;
 
 pub struct Animator {
     pub current_frame: usize,
@@ -66,7 +68,6 @@ pub struct GameState {
     pub current_sprite_frame: u32,
     pub sprite_frame_count: u32,
     pub last_sprite_frame_time: Instant,
-    pub camera_controller: CameraController,
     pub camera: Camera,
     pub instances: Vec<Instance>,
     pub controller: Controller,
@@ -109,7 +110,6 @@ impl GameState {
             current_sprite_frame: 0,
             sprite_frame_count: 24,
             last_sprite_frame_time: Instant::now(),
-            camera_controller: CameraController::new(0.2),
             camera,
             instances,
             controller: Controller::new(0.2),
@@ -161,8 +161,6 @@ impl GameState {
             self.instances[0].position[0] += 0.05;
         }
         if dt.as_millis() > 0 {
-            self.camera_controller.update_camera(&mut self.camera);
-            
             for i in &mut self.instances {
                 i.animator.update();
             }
