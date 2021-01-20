@@ -70,6 +70,7 @@ pub struct GameState {
     pub last_sprite_frame_time: Instant,
     pub camera: Camera,
     pub instances: Vec<Instance>,
+    pub ai_controllers: Vec<ai::AIController>,
     pub controller: Controller,
     pub animations: Vec<Animation>,
 }
@@ -96,12 +97,16 @@ impl GameState {
 
         instances.push(
             Instance {
-                position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
+                position: cgmath::Vector3 { x: 0.0, y: 2.0, z: 0.0 },
                 direction: Direction::N,
                 frame: 0,
                 animator: Animator::new(animations[0].clone())
             }
         );
+
+        let mut ai_controllers = Vec::new();
+
+        ai_controllers.push(ai::AIController::new());
 
         GameState {
             last_frame: Instant::now(),
@@ -112,6 +117,7 @@ impl GameState {
             last_sprite_frame_time: Instant::now(),
             camera,
             instances,
+            ai_controllers,
             controller: Controller::new(0.2),
             animations,
         }
@@ -163,6 +169,15 @@ impl GameState {
         if dt.as_millis() > 0 {
             for i in &mut self.instances {
                 i.animator.update();
+            }
+        }
+
+        for ai_controller in &mut self.ai_controllers {
+            ai_controller.update();
+
+            if let ai::State::Walking {velocity, ..} = ai_controller.state  {
+                self.instances[0].position[0] += velocity.0 * dt.as_secs_f32();
+                self.instances[0].position[1] += velocity.1 * dt.as_secs_f32();
             }
         }
     }
