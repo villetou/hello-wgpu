@@ -86,7 +86,6 @@ impl GameState {
             zfar: 100.0,
         };
 
-        let mut instances: Vec<Instance> = Vec::<Instance>::new();
         
         let mut animations = Vec::new();
 
@@ -95,18 +94,23 @@ impl GameState {
         animations.push(Animation { frames: (12..17).collect(), default_timing: std::time::Duration::from_millis(100) });
         animations.push(Animation { frames: (18..23).collect(), default_timing: std::time::Duration::from_millis(100) });
 
-        instances.push(
-            Instance {
-                position: cgmath::Vector3 { x: 0.0, y: 2.0, z: 0.0 },
-                direction: Direction::N,
-                frame: 0,
-                animator: Animator::new(animations[0].clone())
-            }
-        );
-
+        let mut instances: Vec<Instance> = Vec::<Instance>::new();
         let mut ai_controllers = Vec::new();
 
-        ai_controllers.push(ai::AIController::new());
+        for i in 0..1000 {
+            instances.push(
+                Instance {
+                    position: cgmath::Vector3 { x: 0.0, y: 2.0, z: 0.0 },
+                    direction: Direction::N,
+                    frame: 0,
+                    animator: Animator::new(animations[i % 4].clone())
+                }
+            );
+
+            ai_controllers.push(ai::AIController::new());
+        }
+        
+
 
         GameState {
             last_frame: Instant::now(),
@@ -166,18 +170,22 @@ impl GameState {
         if self.controller.is_right_pressed {
             self.instances[0].position[0] += 0.05;
         }
-        if dt.as_millis() > 0 {
-            for i in &mut self.instances {
-                i.animator.update();
-            }
-        }
 
-        for ai_controller in &mut self.ai_controllers {
+
+        for i in 0..self.ai_controllers.len() {
+            let ai_controller = &mut self.ai_controllers[i];
+            
             ai_controller.update();
 
             if let ai::State::Walking {velocity, ..} = ai_controller.state  {
-                self.instances[0].position[0] += velocity.0 * dt.as_secs_f32();
-                self.instances[0].position[1] += velocity.1 * dt.as_secs_f32();
+                self.instances[i].position[0] += velocity.0 * dt.as_secs_f32();
+                self.instances[i].position[1] += velocity.1 * dt.as_secs_f32();
+            }
+        }
+
+        if dt.as_millis() > 0 {
+            for i in &mut self.instances {
+                i.animator.update();
             }
         }
     }
