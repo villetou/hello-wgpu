@@ -35,16 +35,17 @@ impl AIController {
                     let mut rng = rand::thread_rng();
                     self.state = State::Walking {
                         started: Instant::now(),
-                        duration: Duration::from_secs(1),
+                        duration: Duration::from_millis(800 + rng.gen::<u64>() % 1000),
                         velocity: (rng.gen::<f32>() * 2.0 - 1.0, rng.gen::<f32>() * 2.0 - 1.0),
                     }
                 }
             }
             State::Walking { started, duration, .. } => {
                 if started.elapsed() > duration {
+                    let mut rng = rand::thread_rng();
                     self.state = State::Standing {
                         started: Instant::now(),
-                        duration: Duration::from_secs(1),
+                        duration: Duration::from_millis(800 + rng.gen::<u64>() % 1000),
                     }
                 }
             }
