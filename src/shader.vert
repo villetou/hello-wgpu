@@ -16,10 +16,6 @@ uniform Uniforms {
 void main() {
     vec2 tex_coords = vec2(0, 0);
 
-    // Sort with Z
-    mat4 y_to_inverse_z = mat4(1.0);
-    y_to_inverse_z[2][1] = -0.01;
-
     switch(gl_VertexIndex) {
         case 0:
             tex_coords = vec2(sprite_coordinates[frame].x, sprite_coordinates[frame].w);
@@ -36,5 +32,7 @@ void main() {
     }
 
     v_tex_coords = tex_coords;
-    gl_Position = u_view_proj * y_to_inverse_z * model_matrix * vec4(a_position, 1.0);
+
+    gl_Position = u_view_proj * model_matrix * vec4(a_position, 1.0);
+    gl_Position.z = model_matrix[1][1];
 }
