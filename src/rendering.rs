@@ -173,6 +173,7 @@ pub struct State {
     pub imgui: ImguiState,
     pub bg_color: [f32; 3],
     pub instance_buffer: wgpu::Buffer,
+    pub depth_texture: texture::Texture,
 }
 
 impl State {
@@ -235,6 +236,7 @@ impl State {
         // 6x4 sprites in 600x400 pixels
         let diffuse_bytes = include_bytes!("trump_run.png");
         let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "trump_run").unwrap();
+        let depth_texture = texture::Texture::create_depth_texture(&device, &sc_desc, "depth_texture");
 
         let texture_bind_group_layout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -447,6 +449,7 @@ impl State {
             imgui,
             bg_color: [0.02, 0.02, 0.01],
             instance_buffer,
+            depth_texture,
         }
     }
 
@@ -457,7 +460,8 @@ impl State {
         self.sc_desc.width = new_size.width;
         self.sc_desc.height = new_size.height;
 
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc)
+        self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
+        self.depth_texture = texture::Texture::create_depth_texture(&self.device, &self.sc_desc, "depth_texture");
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
