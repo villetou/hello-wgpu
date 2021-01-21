@@ -20,7 +20,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
-        let proj = cgmath::ortho(-self.height * self.aspect / 2.0 + self.center.x, self.height * self.aspect / 2.0 + self.center.x, self.center.y, self.height + self.center.y, self.znear, self.zfar);
+        let proj = cgmath::ortho(-self.height * self.aspect / 2.0 + self.center.x, self.height * self.aspect / 2.0 + self.center.x, -self.height / 2.0 + self.center.y, self.height / 2.0 + self.center.y, self.znear, self.zfar);
         return OPENGL_TO_WGPU_MATRIX * proj;
     }
 }

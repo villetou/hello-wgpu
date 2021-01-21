@@ -102,7 +102,7 @@ impl GameState {
     pub fn new () -> GameState {
         let camera = Camera {
             center: cgmath::Vector2::new(0.0, 0.0),
-            height: 3.0,
+            height: 6.0,
             aspect: 16.0/9.0,
             znear: -1.0,
             zfar: 100.0,
@@ -122,7 +122,7 @@ impl GameState {
         for i in 0..20 {
             instances.push(
                 Instance {
-                    position: cgmath::Vector3 { x: 0.0, y: 2.0, z: 0.0 },
+                    position: cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 },
                     direction: Direction::N,
                     frame: 0,
                     animator: Animator::new(animations[i % 4].clone())

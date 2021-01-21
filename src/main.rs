@@ -13,8 +13,6 @@ use winit::{
     window::{WindowBuilder},
 };
 
-use game::*;
-
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
