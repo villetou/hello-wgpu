@@ -43,15 +43,16 @@ pub struct Animation {
     pub default_timing: std::time::Duration,
 }
 
+#[derive(Clone, PartialEq)]
 pub enum Direction {
-    N,
-    //NE,
-    E,
-    //SE,
-    S,
+    S = 0,
     //SW,
-    W,
+    W = 1,
     //NW,
+    N = 2,
+    //NE,
+    E = 3,
+    //SE,
 }
 
 pub struct Instance {
@@ -59,6 +60,27 @@ pub struct Instance {
     pub direction: Direction,
     pub frame: u32,
     pub animator: Animator
+}
+
+impl Instance {
+    fn get_direction_from_velocity(velocity: (f32, f32)) -> Direction {
+        if velocity.0*velocity.0 > velocity.1*velocity.1 {
+            if velocity.0 < 0.0 { 
+                return Direction::E;
+            }
+            else {
+                return Direction::W;
+            }
+        }
+        else {
+            if velocity.1 < 0.0 { 
+                return Direction::S;
+            }
+            else {
+                return Direction::N;
+            }
+        }
+    }
 }
 
 pub struct GameState {
@@ -97,7 +119,7 @@ impl GameState {
         let mut instances: Vec<Instance> = Vec::<Instance>::new();
         let mut ai_controllers = Vec::new();
 
-        for i in 0..1000 {
+        for i in 0..20 {
             instances.push(
                 Instance {
                     position: cgmath::Vector3 { x: 0.0, y: 2.0, z: 0.0 },
@@ -180,6 +202,12 @@ impl GameState {
             if let ai::State::Walking {velocity, ..} = ai_controller.state  {
                 self.instances[i].position[0] += velocity.0 * dt.as_secs_f32();
                 self.instances[i].position[1] += velocity.1 * dt.as_secs_f32();
+                let new_direction = Instance::get_direction_from_velocity(velocity);
+                if self.instances[i].direction != new_direction {
+                    self.instances[i].animator.animation = self.animations[new_direction.clone() as usize].clone();
+                    self.instances[i].direction = new_direction;
+                } 
+                self.instances[i].direction = Instance::get_direction_from_velocity(velocity);
             }
         }
 
